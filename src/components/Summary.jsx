@@ -1,7 +1,7 @@
 import { CAT } from "../lib/categories.js";
 import { money, num, monthLabel } from "../lib/format.js";
 
-export function Tiles({ totals, months, incomeCount, cur }) {
+export function Tiles({ totals, self, months, incomeCount, cur }) {
   const net = totals.inc - totals.out;
   return (
     <section className="tiles">
@@ -22,22 +22,31 @@ export function Tiles({ totals, months, incomeCount, cur }) {
           {totals.inc ? `ai cheltuit ${Math.round((totals.out / totals.inc) * 100)}% din venituri` : "fără venituri în perioadă"}
         </span>
       </div>
+      {self.n > 0 && (
+        <div className="tile">
+          <span className="label">Între conturile mele</span>
+          <span className="v self">{money(Math.max(self.in, self.out), cur)}</span>
+          <span className="sub">
+            {self.n} {self.n === 1 ? "mutare" : "mutări"}: {money(self.in, cur)} intrate, {money(self.out, cur)} ieșite. Nu intră în totaluri.
+          </span>
+        </div>
+      )}
     </section>
   );
 }
 
-export function CategoryList({ byCat, filter, onPick, cur, onCopy }) {
+export function CategoryList({ byCat, filter, onPick, cur, onCopy, title = "Cheltuieli pe categorii", empty = "Nicio cheltuială găsită." }) {
   const list = Object.entries(byCat).filter(([, v]) => Math.abs(v.sum) > 0.005).sort((a, b) => b[1].sum - a[1].sum);
   const max = Math.max(...list.map(([, v]) => v.sum), 1);
   const total = list.reduce((s, [, v]) => s + Math.max(v.sum, 0), 0) || 1;
   return (
     <div className="panel">
       <div className="head">
-        <h2>Cheltuieli pe categorii</h2>
-        <button className="btn ghost small" onClick={onCopy}>Copiază rezumatul</button>
+        <h2>{title}</h2>
+        {onCopy && <button className="btn ghost small" onClick={onCopy}>Copiază rezumatul</button>}
       </div>
       <div className="cats">
-        {list.length === 0 && <p className="hint">Nicio cheltuială găsită.</p>}
+        {list.length === 0 && <p className="hint">{empty}</p>}
         {list.map(([id, v]) => {
           const c = CAT[id] || CAT.altele;
           return (

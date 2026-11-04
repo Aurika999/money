@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CATS } from "../lib/categories.js";
+import { CATS, fits, kindOf } from "../lib/categories.js";
 import { norm } from "../lib/parse.js";
 import { fmtDate, num } from "../lib/format.js";
 
@@ -23,7 +23,7 @@ export default function Ledger({ tx, catOf, filter, setFilter, overrides, onSetC
     <section className="panel">
       <div className="head">
         <h2>Tranzacții</h2>
-        <span className="hint" style={{ margin: 0 }}>Schimbă categoria din listă dacă a fost ghicită greșit.</span>
+        <span className="hint" style={{ margin: 0 }}>Schimbă categoria dacă a fost ghicită greșit. La intrări alegi sursa venitului; mutările între conturile tale alege „Între conturile mele”.</span>
       </div>
       <div className="tools">
         <input id="q" type="search" placeholder="Caută în descriere (ex. Kaufland)" value={q} onChange={(e) => { setQ(e.target.value); setLimit(PAGE); }} />
@@ -44,13 +44,13 @@ export default function Ledger({ tx, catOf, filter, setFilter, overrides, onSetC
               <tr><td colSpan={4} className="hint">Nicio tranzacție pentru acest filtru.</td></tr>
             )}
             {shown.map((t) => (
-              <tr key={t.key} className={overrides[t.key] ? "edited" : ""}>
+              <tr key={t.key} className={`${overrides[t.key] ? "edited" : ""} ${kindOf(catOf(t)) === "self" ? "self" : ""}`}>
                 <td className="d num">{fmtDate(t.date)}</td>
                 <td className="desc">{t.desc || <span className="hint">fără descriere</span>}</td>
                 <td className={`r num ${t.amount > 0 ? "pos" : "neg"}`}>{t.amount > 0 ? "+" : ""}{num(t.amount)}</td>
                 <td>
                   <select aria-label="Categorie" value={catOf(t)} onChange={(e) => onSetCat(t, e.target.value)}>
-                    {CATS.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {CATS.filter((c) => fits(c.id, t.amount)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </td>
               </tr>

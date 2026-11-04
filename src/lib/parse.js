@@ -1,5 +1,5 @@
 // Citirea extrasului: CSV/Excel -> rânduri -> tranzacții încadrate pe categorii.
-import { BUILTIN, KEYS } from "./categories.js";
+import { BUILTIN, KEYS, fits } from "./categories.js";
 
 export const norm = (s) =>
   String(s ?? "")
@@ -160,10 +160,9 @@ export function detectColumns(rows) {
 
 export function categorize(desc, amount, rules) {
   const n = norm(desc);
-  for (const r of rules) if (kwRe(r.kw).test(n)) return r.cat;
-  if (amount > 0) return "venituri";
-  for (const [cat, kws] of BUILTIN) for (const k of kws) if (kwRe(k).test(n)) return cat;
-  return "altele";
+  for (const r of rules) if (fits(r.cat, amount) && kwRe(r.kw).test(n)) return r.cat;
+  for (const [cat, kws] of BUILTIN) if (fits(cat, amount)) for (const k of kws) if (kwRe(k).test(n)) return cat;
+  return amount > 0 ? "venituri" : "altele";
 }
 
 /** Rânduri + coloane alese -> tranzacții { key, date, desc, amount, auto } */

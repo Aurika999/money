@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CAT } from "./lib/categories.js";
+import { CAT, fits, kindOf } from "./lib/categories.js";
 import { buildTransactions, detectColumns, readFile } from "./lib/parse.js";
 import { fmtDate, money } from "./lib/format.js";
 import Upload from "./components/Upload.jsx";
@@ -41,30 +41,40 @@ export default function App() {
   }, [rules]);
 
   const tx = useMemo(() => (source ? buildTransactions(source.rows, source.headerIdx, map, rules) : []), [source, map, rules]);
-  const catOf = useCallback((t) => overrides[t.key] || t.auto, [overrides]);
+  const catOf = useCallback((t) => {
+    const o = overrides[t.key];
+    return o && fits(o, t.amount) ? o : t.auto;
+  }, [overrides]);
   const cur = source?.currency;
 
   const stats = useMemo(() => {
-    let inc = 0, out = 0;
-    const byCat = {}, byMonth = {};
+    let inc = 0, out = 0, selfIn = 0, selfOut = 0, selfN = 0, incomeCount = 0;
+    const byCat = {}, byIncome = {}, byMonth = {};
     for (const t of tx) {
       const c = catOf(t);
+      if (kindOf(c) === "self") {
+        selfN++;
+        if (t.amount > 0) selfIn += t.amount; else selfOut -= t.amount;
+        continue;
+      }
       const k = t.date ? t.date.slice(0, 7) : "—";
       const m = (byMonth[k] ||= { inc: 0, out: 0, cats: {} });
-      if (t.amount > 0) { inc += t.amount; m.inc += t.amount; }
-      else { out -= t.amount; m.out -= t.amount; m.cats[c] = (m.cats[c] || 0) - t.amount; }
-      if (c === "venituri") continue;
-      const b = (byCat[c] ||= { sum: 0, n: 0 });
-      b.sum -= t.amount;
+      const v = Math.abs(t.amount);
+      const b = t.amount > 0 ? (byIncome[c] ||= { sum: 0, n: 0 }) : (byCat[c] ||= { sum: 0, n: 0 });
+      b.sum += v;
       b.n++;
+      if (t.amount > 0) { inc += v; m.inc += v; incomeCount++; }
+      else { out += v; m.out += v; m.cats[c] = (m.cats[c] || 0) + v; }
     }
     const dates = tx.map((t) => t.date).filter(Boolean).sort();
     return {
       totals: { inc, out },
+      self: { in: selfIn, out: selfOut, n: selfN },
       byCat,
+      byIncome,
       byMonth,
       months: Object.keys(byMonth).filter((k) => k !== "—").length || 1,
-      incomeCount: tx.filter((t) => t.amount > 0).length,
+      incomeCount,
       period: dates.length ? `${fmtDate(dates[0])} – ${fmtDate(dates[dates.length - 1])}` : "perioadă necunoscută",
     };
   }, [tx, catOf]);
@@ -102,13 +112,19 @@ export default function App() {
   };
 
   const copySummary = () => {
-    const { totals, byCat } = stats;
+    const { totals, byCat, byIncome, self } = stats;
+    const lines = (o) => Object.entries(o).sort((a, b) => b[1].sum - a[1].sum).map(([c, v]) => `  ${(CAT[c] || CAT.altele).name}: ${money(v.sum, cur)}`);
     const text = [
       `Venituri: ${money(totals.inc, cur)}`,
       `Cheltuieli: ${money(totals.out, cur)}`,
       `Rămas: ${money(totals.inc - totals.out, cur)}`,
+      ...(self.n ? [`Între conturile mele (exclus din totaluri): ${money(self.in, cur)} intrate, ${money(self.out, cur)} ieșite`] : []),
       "",
-      ...Object.entries(byCat).sort((a, b) => b[1].sum - a[1].sum).map(([c, v]) => `${(CAT[c] || CAT.altele).name}: ${money(v.sum, cur)}`),
+      "Venituri pe surse:",
+      ...lines(byIncome),
+      "",
+      "Cheltuieli pe categorii:",
+      ...lines(byCat),
     ].join("\n");
     const fallback = () => {
       const ta = document.createElement("textarea");
@@ -146,13 +162,16 @@ export default function App() {
 
           {tx.length > 0 && (
             <>
-            <Tiles totals={stats.totals} months={stats.months} incomeCount={stats.incomeCount} cur={cur} />
+            <Tiles totals={stats.totals} self={stats.self} months={stats.months} incomeCount={stats.incomeCount} cur={cur} />
 
             <section className="two">
               <CategoryList byCat={stats.byCat} filter={filter} cur={cur} onCopy={copySummary}
                 onPick={(id) => setFilter((f) => (f === id ? "all" : id))} />
-              <MonthTable byMonth={stats.byMonth} />
+              <CategoryList title="Venituri pe surse" empty="Nicio încasare găsită." byCat={stats.byIncome} filter={filter} cur={cur}
+                onPick={(id) => setFilter((f) => (f === id ? "all" : id))} />
             </section>
+
+            <MonthTable byMonth={stats.byMonth} />
 
             <Ledger tx={tx} catOf={catOf} filter={filter} setFilter={setFilter} overrides={overrides} onSetCat={setCat} />
 
